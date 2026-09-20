@@ -1,6 +1,7 @@
 import json
 from app.db import connect
 from app.engines.tariff_breakdown import calc_fare
+from app.repositories.settings import DEFAULT_SLOW_THRESHOLD, SLOW_THRESHOLD_KEY
 
 TARIFF = {"start_price": 11, "start_include_km": 3, "per_km": 2.5, "per_slow_min": 0.8, "night_factor": 1.2}
 
@@ -20,5 +21,9 @@ def init_db():
         r = calc_fare(5, 2, False, TARIFF)
         conn.execute("INSERT INTO calc_runs(kind,trip_id,input_json,result_json,created_at) VALUES ('fare',1,?,?,datetime('now'))",
             (json.dumps({"distance_km":5,"slow_min":2,"night":False}), json.dumps(r)))
+        conn.commit()
+    # 旧库幂等补齐低速阈值时速（默认 12km/h），已存在则不动
+    if conn.execute("SELECT COUNT(*) c FROM settings WHERE key=?", (SLOW_THRESHOLD_KEY,)).fetchone()["c"] == 0:
+        conn.execute("INSERT INTO settings(key,value) VALUES (?,?)", (SLOW_THRESHOLD_KEY, str(DEFAULT_SLOW_THRESHOLD)))
         conn.commit()
     conn.close()
